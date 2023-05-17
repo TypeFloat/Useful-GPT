@@ -4,24 +4,48 @@
     {% load static %}
     <meta charset="UTF-8">
     <title>输入输出示例</title>
-    <link rel="stylesheet" type="text/css" href="{% static 'css/styles.css' %}">
+    <link rel="stylesheet" type="text/css" href="{% static 'css/papers/index.css' %}">
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
-    {% csrf_token %}
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsdiff/3.5.0/diff.min.js"></script>
+    <link src="{% static 'image/pandas.png' %}">
 </head>
 
-<body>
-    <div class="container">
-        <div class="left-pane">
-            <h1>输入</h1>
-            <form>
-                <textarea id="input" rows="10" cols="50"></textarea>
-            </form>
-            <button id="btn">提交</button>
+<body class="body">
+    <!-- Header -->
+    <header class="header">
+        <img src="{% static 'image/pandas.png' %}" class="logo">
+        <nav>
+            <select class="select" id="lang">
+                <option value="0">请选择输出的语言</option>
+                <option value="english">英语</option>
+                <option value="chinese">汉语</option>
+            </select>
+            <select class="select" id="func">
+                <option value="0">请选择功能</option>
+                <option value="translate">翻译</option>
+                <option value="modify">修改</option>
+            </select>
+            <button id="submit" class="button">Submit</button>
+        </nav>
+    </header>
+
+    <!-- Main content -->
+    <div class="main">
+        <div class="left-column">
+            <textarea placeholder="请在此输入内容" class="input" id="input"></textarea>
         </div>
-        <div class="right-pane">
-            <h1>输出</h1>
-            <textarea id="output" rows="10" cols="50" readonly></textarea>
+        <div class="right-column">
+            <div class="top-row">
+                <div class="box" id="raw_text"></div>
+            </div>
+            <div class="bottom-row">
+                <div class="box" id="processed_text"></div>
+            </div>
         </div>
+    </div>
+
+    <div id="overlay">
+        <div class="loader"></div>
     </div>
 
 </body>
@@ -30,20 +54,104 @@
 
 <script>
     $(document).ready(function () {
-        $("#btn").click(function () {
+        $("#submit").click(function () {
+            var lang = $("#lang").val()
+            if (lang == "0") {
+                alert("请选择语言～");
+                return;
+            }
+            var func = $("#func").val()
+            if (func == "0") {
+                alert("请选择功能～");
+                return;
+            }
             // 获取输入框的内容
-            const inputText = $("#input").val();
-
+            var inputText = $("#input").val();
+            if (inputText == "") {
+                alert("请输入内容～");
+                return;
+            }
+            // 如果长度超过500，需要减少字符
+            if (inputText.length > 500) {
+                alert("输入内容过长，请减少字符～");
+                return;
+            }
+            showLoading();
             // 发送 AJAX 请求到服务器进行处理
             $.ajax({
                 type: "POST",
                 url: "/papers/process",
-                data: { input: inputText, csrfmiddlewaretoken: '{{ csrf_token }}'},
+                data: {
+                    input: inputText,
+                    func: func,
+                    lang: lang,
+                    csrfmiddlewaretoken: '{{ csrf_token }}',
+                },
                 success: function (result) {
                     // 处理成功，将结果显示在输出框中
-                    $("#output").val(result.content);
+                    if (func == "translate")
+                    {
+                        putText(result.content)
+                    }
+                    else if (func == "modify")
+                    {
+                        compareText(inputText, result.content);
+                    }
+                    hideLoading();
+                },
+                error: function (result) {
+                    // 处理失败
+                    alert("好像遇到了些问题，请重试～")
+                    hideLoading();
                 }
             });
         });
     });
+
+    function putText(text) {
+        document.getElementById("processed_text").innerHTML = text;
+    }
+
+    function compareText(firstText, secondText) {
+
+        // 自定义分隔符为“”（空字符串），以支持中文
+        var diff = JsDiff.diffChars(firstText, secondText);
+
+        var output1 = "";
+        var output2 = "";
+        diff.forEach(function (part) {
+            var color = part.added ? 'added' :
+                part.removed ? 'removed' : 'no-change';
+
+            if (part.added) {
+                output2 += "<span class='" + color + "'>" + escapeHtml(part.value) + "</span>";
+            } else if (part.removed) {
+                output1 += "<span class='" + color + "'>" + escapeHtml(part.value) + "</span>";
+            } else {
+                output1 += escapeHtml(part.value);
+                output2 += escapeHtml(part.value);
+            }
+        });
+
+        document.getElementById("raw_text").innerHTML = output1;
+        document.getElementById("processed_text").innerHTML = output2;
+    }
+
+    // 转义HTML标记
+    function escapeHtml(str) {
+        var div = document.createElement('div');
+        div.appendChild(document.createTextNode(str));
+        return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function showLoading() {
+        var overlay = document.getElementById("overlay");
+        overlay.style.display = "block";
+    }
+
+    function hideLoading() {
+        var overlay = document.getElementById("overlay");
+        overlay.style.display = "none";
+    }
+
 </script>
